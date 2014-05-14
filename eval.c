@@ -99,13 +99,14 @@ struct list *eval(struct list *list)
         }
         else if (strcmp(sym, "eq") == 0)
         {
-            struct list *a = l->next;
-            if (!a)
-                return list_append(NULL, &false_atom);
+            struct list *a = CDR(l);
+            struct list *b = CDR(a);
 
-            struct list *b = a->next;
-            if (!b)
-                return list_append(NULL, &false_atom);
+            if (!a || !b)
+            {
+                printf("error: eq takes 2 arguments\n");
+                return list_append(NULL, &nil_atom);
+            }
 
             a = eval(a);
             b = eval(b);
