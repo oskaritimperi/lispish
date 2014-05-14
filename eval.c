@@ -3,6 +3,7 @@
 #include "atom.h"
 #include "parse.h"
 
+#include <stdio.h>
 #include <string.h>
 
 static int atom_cmp(struct list *a, struct list *b)
@@ -194,6 +195,27 @@ struct list *eval(struct list *list)
                 return eval(true_case);
             else
                 return eval(false_case);
+        }
+        else if (strcmp(sym, "mod") == 0)
+        {
+            struct list *a = CDR(l);
+            struct list *b = CDR(a);
+
+            if (!a || !b)
+            {
+                printf("error: mod takes two arguments\n");
+                return list_append(NULL, &nil_atom);
+            }
+
+            if (!IS_INT(a) || !IS_INT(b))
+            {
+                printf("error: mod arguments must be integers\n");
+                return list_append(NULL, &nil_atom);
+            }
+
+            long result = LIST_GET_ATOM(a)->l % LIST_GET_ATOM(b)->l;
+
+            return list_append(NULL, atom_new_int(result));
         }
     }
     else if (IS_LIST(l))
