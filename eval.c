@@ -311,4 +311,27 @@ TEST(eval)
 #undef EVAL
 }
 
+TEST(nested_expression)
+{
+    struct list *result = eval_str("(eq #f (> (- (+ 1 3) (* 2 (mod 7 4))) 4))");
+    ASSERT_TRUE(result != NULL);
+    ASSERT_TRUE(IS_TRUE(result));
+}
+
+TEST(basic_if)
+{
+    struct list *result = eval_str("(if #t 42 1000)");
+    ASSERT_TRUE(result != NULL);
+    ASSERT_EQ(ATOM_INT, ATOM_TYPE(result));
+    ASSERT_EQ(42, LIST_GET_ATOM(result)->l);
+}
+
+TEST(if_with_sub_expressions)
+{
+    struct list *result = eval_str("(if (> 1 2) (- 1000 1) (+ 40 (- 3 1)))");
+    ASSERT_TRUE(result != NULL);
+    ASSERT_EQ(ATOM_INT, ATOM_TYPE(result));
+    ASSERT_EQ(42, LIST_GET_ATOM(result)->l);
+}
+
 #endif /* BUILD_TEST */
