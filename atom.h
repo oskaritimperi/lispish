@@ -4,13 +4,16 @@
 #define LIST_GET_ATOM(LIST) ((struct atom *) (LIST)->data)
 
 #define ATOM_TYPE(LIST) ((LIST_GET_ATOM(LIST))->type)
+
 #define IS_INT(LIST) ((ATOM_TYPE(LIST)) == ATOM_INT)
 #define IS_STR(LIST) ((ATOM_TYPE(LIST)) == ATOM_STR)
 #define IS_SYM(LIST) ((ATOM_TYPE(LIST)) == ATOM_SYMBOL)
 #define IS_LIST(LIST) ((ATOM_TYPE(LIST)) == ATOM_LIST)
+#define IS_ATOM(LIST) (!(IS_LIST(LIST)))
 
 #define IS_TRUE(LIST) (LIST_GET_ATOM(LIST) == &true_atom)
 #define IS_FALSE(LIST) (LIST_GET_ATOM(LIST) == &false_atom)
+
 #define IS_NIL(LIST) (LIST_GET_ATOM(LIST) == &nil_atom)
 
 #define CAR(LIST) LIST
@@ -24,11 +27,16 @@ enum
     ATOM_INT,
     ATOM_STR,
     ATOM_SYMBOL,
-    ATOM_LIST
+    ATOM_LIST,
+    ATOM_TRUE,
+    ATOM_FALSE
 };
+
+struct list;
 
 struct atom
 {
+    char type;
     union
     {
         long l;
@@ -39,10 +47,7 @@ struct atom
         } str;
         struct list *list;
     };
-    char type;
 };
-
-struct list;
 
 struct atom *atom_new(char type);
 struct atom *atom_new_int(long l);

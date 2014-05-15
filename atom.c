@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct atom true_atom;
-struct atom false_atom;
-struct atom nil_atom;
+struct atom true_atom = { ATOM_TRUE };
+struct atom false_atom = { ATOM_FALSE };
+struct atom nil_atom = { ATOM_NIL } ;
 
 struct atom *atom_new(char type)
 {
