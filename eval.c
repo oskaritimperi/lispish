@@ -2,6 +2,7 @@
 #include "list.h"
 #include "atom.h"
 #include "parse.h"
+#include "env.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -87,6 +88,22 @@ struct list *eval_str(const char *str)
 
 struct list *eval_env(struct list *expr, struct list *env)
 {
+    if (IS_SYM(expr))
+    {
+        struct atom *atom = env_lookup(env, LIST_GET_ATOM(expr)->str.str);
+
+        if (atom)
+        {
+            return list_append(NULL, atom);
+        }
+        else
+        {
+            printf("error: undefined variable: %s\n",
+                LIST_GET_ATOM(expr)->str.str);
+            return list_append(NULL, &nil_atom);
+        }
+    }
+
     if (!IS_LIST(expr))
         return expr;
 
@@ -232,6 +249,30 @@ struct list *eval_env(struct list *expr, struct list *env)
 
             return list_append(NULL, atom_new_int(result));
         }
+        else if (strcmp(sym, "define") == 0)
+        {
+            struct list *expr_name = CDR(l);
+            struct list *expr_value = CDR(expr_name);
+
+            if (!expr_name || !expr_value)
+            {
+                printf("error: define takes two arguments\n");
+                return list_append(NULL, &nil_atom);
+            }
+
+            if (!IS_SYM(expr_name))
+            {
+                printf("error: define: first arg must be symbol\n");
+                return list_append(NULL, &nil_atom);
+            }
+
+            expr_value = eval_env(expr_value, env);
+
+            env_set(env, LIST_GET_ATOM(expr_name)->str.str,
+                LIST_GET_ATOM(expr_value));
+
+            return list_append(NULL, expr_value);
+        }
     }
     else if (IS_LIST(l))
     {
@@ -255,76 +296,6 @@ struct list *eval_str_env(const char *expr, struct list *env)
 
 #include "test_util.h"
 
-TEST(eval)
-{
-    struct list *result;
-    int pos;
-
-#define EVAL(EXPR) \
-    pos = 0; \
-    result = eval(parse((EXPR), &pos))
-
-#define ARITHMETIC_TEST(EXPR, RESULT) \
-    EVAL(EXPR); \
-    ASSERT_EQ(ATOM_INT, ATOM_TYPE(result)); \
-    ASSERT_EQ(RESULT, LIST_GET_ATOM(result)->l)
-
-    ARITHMETIC_TEST("(+ 1 2)", 3);
-    ARITHMETIC_TEST("(- 5 10)", -5);
-    ARITHMETIC_TEST("(/ 42 2)", 21);
-    ARITHMETIC_TEST("(* 5 10)", 50);
-    ARITHMETIC_TEST("(* (* 2 (+ 1 1)) 2)", 8);
-
-#undef ARITHMETIC_TEST
-
-#define EQ_TEST(EXPR, RESULT) \
-    EVAL(EXPR); \
-    ASSERT_EQ(result, RESULT)
-
-#define EQ_TEST_T(EXPR) EVAL(EXPR); ASSERT(IS_TRUE(result))
-#define EQ_TEST_F(EXPR) EVAL(EXPR); ASSERT(IS_FALSE(result))
-
-    EQ_TEST_T("(eq 1 1)");
-    EQ_TEST_T("(eq (+ 1 1) 2)");
-    EQ_TEST_T("(eq (quote (1 2 3)) (quote (1 2 3)))");
-
-    EQ_TEST_T("(eq \"eka\" \"eka\"");
-    EQ_TEST_F("(eq \"eka\" eka)");
-    EQ_TEST_F("(eq \"eka\" 100)");
-    EQ_TEST_F("(eq \"eka\" \"toka\"");
-
-    EQ_TEST_T("(eq eka eka)");
-    EQ_TEST_F("(eq eka toka)");
-
-    EQ_TEST_F("(eq 1 2)");
-    EQ_TEST_F("(eq 1 (- 1 1))");
-    EQ_TEST_F("(eq (quote (1)) (quote (1 2 3)))");
-
-    EQ_TEST_T("(eq (quote (1 2)) '(1 2))");
-    EQ_TEST_T("(eq 'bar 'bar)");
-    EQ_TEST_F("(eq 'foo 'bar)");
-    EQ_TEST_T("(eq (quote bar) 'bar)");
-    EQ_TEST_F("(eq (quote foo) 'bar)");
-
-    EQ_TEST_F("(> 1 2)");
-    EQ_TEST_T("(> 2 1)");
-
-#undef EQ_TEST_F
-#undef EQ_TEST_T
-#undef EQ_TEST
-
-    EVAL("(if #t 1 2)");
-    ASSERT_EQ(1, LIST_GET_ATOM(result)->l);
-
-    EVAL("(if #t (+ 1 1) (* 2 2))");
-    ASSERT_EQ(2, LIST_GET_ATOM(result)->l);
-
-    EVAL("(if #f (+ 1 1) (* 2 2))");
-    ASSERT_EQ(4, LIST_GET_ATOM(result)->l);
-
-#undef EVAL
-}
-
 TEST(nested_expression)
 {
     struct list *result = eval_str("(eq #f (> (- (+ 1 3) (* 2 (mod 7 4))) 4))");
@@ -347,5 +318,81 @@ TEST(if_with_sub_expressions)
     ASSERT_EQ(ATOM_INT, ATOM_TYPE(result));
     ASSERT_EQ(42, LIST_GET_ATOM(result)->l);
 }
+
+/* EVALUTE WITH ENVIRONMENT TESTS */
+
+TEST(evaluate_symbol)
+{
+    struct list *env = env_new();
+    env_set(env, "foo", atom_new_int(42));
+
+    struct list *result = eval_str_env("foo", env);
+
+    ASSERT_TRUE(result != NULL);
+    ASSERT_EQ(ATOM_INT, ATOM_TYPE(result));
+    ASSERT_EQ(42, LIST_GET_ATOM(result)->l);
+}
+
+TEST(evaluate_missing_symbol)
+{
+    struct list *env = env_new();
+
+    struct list *result = eval_str_env("foo", env);
+
+    ASSERT_TRUE(result != NULL);
+    ASSERT_EQ(ATOM_NIL, ATOM_TYPE(result));
+}
+
+TEST(define)
+{
+    struct list *env = env_new();
+
+    struct list *result = eval_str_env("(define x 100)", env);
+
+    ASSERT_TRUE(result != NULL);
+
+    struct atom *atom = env_lookup(env, "x");
+
+    ASSERT_TRUE(atom != NULL);
+    ASSERT_EQ(ATOM_INT, atom->type);
+    ASSERT_EQ(100, atom->l);
+}
+
+TEST(define_missing_value)
+{
+    struct list *env = env_new();
+
+    struct list *result = eval_str_env("(define x)", env);
+    ASSERT_TRUE(result != NULL);
+    ASSERT_EQ(ATOM_NIL, ATOM_TYPE(result));
+
+    struct atom *atom = env_lookup(env, "x");
+    ASSERT_TRUE(atom == NULL);
+}
+
+TEST(define_nonsymbol_as_name)
+{
+    struct list *env = env_new();
+
+    struct list *result = eval_str_env("(define 1 100)", env);
+    ASSERT_TRUE(result != NULL);
+    ASSERT_EQ(ATOM_NIL, ATOM_TYPE(result));
+}
+
+TEST(define_with_val_as_expr)
+{
+    struct list *env = env_new();
+
+    struct list *result = eval_str_env("(define x (* 3 3))", env);
+
+    ASSERT_TRUE(result != NULL);
+
+    struct atom *atom = env_lookup(env, "x");
+
+    ASSERT_TRUE(atom != NULL);
+    ASSERT_EQ(ATOM_INT, atom->type);
+    ASSERT_EQ(9, atom->l);
+}
+
 
 #endif /* BUILD_TEST */
