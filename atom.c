@@ -44,6 +44,46 @@ struct atom *atom_new_list(struct list *list)
     return atom;
 }
 
+struct atom *atom_clone(struct atom *atom)
+{
+    switch (atom->type)
+    {
+    case ATOM_NIL:
+    case ATOM_TRUE:
+    case ATOM_FALSE:
+        return atom;
+
+    case ATOM_INT:
+        return atom_new_int(atom->l);
+
+    case ATOM_STR:
+        return atom_new_str(atom->str.str, atom->str.len);
+
+    case ATOM_SYMBOL:
+        return atom_new_sym(atom->str.str, atom->str.len);
+
+    case ATOM_LIST:
+    {
+        struct list *list = atom->list;
+        struct list *clone = NULL, *last = NULL;
+
+        while (list)
+        {
+            struct atom *a = LIST_GET_ATOM(list);
+            struct atom *b = atom_clone(a);
+            last = list_append(last, b);
+            list = list->next;
+            if (!clone)
+                clone = last;
+        }
+
+        return atom_new_list(clone);
+    }
+    }
+
+    return NULL;
+}
+
 #ifdef BUILD_TEST
 
 #include "test_util.h"

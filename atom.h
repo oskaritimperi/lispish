@@ -54,6 +54,7 @@ struct atom *atom_new_int(long l);
 struct atom *atom_new_str(const char *str, int len);
 struct atom *atom_new_sym(const char *sym, int len);
 struct atom *atom_new_list(struct list *list);
+struct atom *atom_clone();
 
 extern struct atom true_atom;
 extern struct atom false_atom;
