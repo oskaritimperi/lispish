@@ -1,4 +1,4 @@
-SOURCES = parse.c list.c atom.c eval.c tokens.c
+SOURCES = parse.c list.c atom.c eval.c tokens.c env.c
 OBJECTS = $(SOURCES:.c=.o)
 
 CFLAGS = -Wall -g
