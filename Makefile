@@ -1,5 +1,6 @@
 SOURCES = parse.c list.c atom.c eval.c tokens.c env.c
 OBJECTS = $(SOURCES:.c=.o)
+TEST_OBJECTS = $(foreach obj,$(OBJECTS),test_$(obj))
 
 CFLAGS = -Wall -g
 LDFLAGS =
@@ -7,18 +8,17 @@ LDFLAGS =
 CC = gcc
 LD = gcc
 
-# ifneq ($(BUILD_TEST),)
+all: test repl
+
+test_%.o: %.c
+	$(CC) $(CFLAGS) -c -o $@ $^
 
 test: CFLAGS := $(CFLAGS) -DBUILD_TEST
-test: $(OBJECTS) tst_main.o
+test: $(TEST_OBJECTS) tst_main.o
 	$(LD) $(LDFLAGS) -o $@ $^
-
-# else
 
 repl: $(OBJECTS) repl.o linenoise.o
 	$(LD) $(LDFLAGS) -o $@ $^
-
-# endif
 
 .PHONY: clean
 clean:
