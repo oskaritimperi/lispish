@@ -1,14 +1,19 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "parse.h"
 #include "eval.h"
 #include "list.h"
+#include "env.h"
 #include "linenoise.h"
 
 int main(int argc, char **argv)
 {
     char *line;
+    struct list *env;
+
+    env = env_new();
 
     linenoiseSetMultiLine(0);
 
@@ -16,9 +21,15 @@ int main(int argc, char **argv)
     {
         linenoiseHistoryAdd(line);
 
-        struct list *result = eval_str(line);
-
-        print_list(result, 0);
+        if (strcmp(".clean", line) == 0)
+        {
+            env = env_new();
+        }
+        else
+        {
+            struct list *result = eval_str_env(line, env);
+            print_list(result, 0);
+        }
 
         free(line);
     }
