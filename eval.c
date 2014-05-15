@@ -73,10 +73,20 @@ static int atom_cmp(struct list *a, struct list *b)
 
 struct list *eval(struct list *list)
 {
-    if (!IS_LIST(list))
-        return list;
+    return eval_env(list, NULL);
+}
 
-    struct list *l = LIST_GET_ATOM(list)->list;
+struct list *eval_str(const char *str)
+{
+    return eval_str_env(str, NULL);
+}
+
+struct list *eval_env(struct list *expr, struct list *env)
+{
+    if (!IS_LIST(expr))
+        return expr;
+
+    struct list *l = LIST_GET_ATOM(expr)->list;
 
     if (IS_SYM(l))
     {
@@ -227,12 +237,12 @@ struct list *eval(struct list *list)
     return list_append(NULL, &nil_atom);
 }
 
-struct list *eval_str(const char *str)
+struct list *eval_str_env(const char *expr, struct list *env)
 {
     struct list *result;
     int pos = 0;
 
-    result = eval(parse(str, &pos));
+    result = eval_env(parse(expr, &pos), env);
 
     return result;
 }
