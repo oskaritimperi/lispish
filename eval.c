@@ -73,12 +73,16 @@ static int atom_cmp(struct list *a, struct list *b)
 
 struct list *eval(struct list *list)
 {
-    return eval_env(list, NULL);
+    struct list env;
+    memset(&env, 0, sizeof(env));
+    return eval_env(list, &env);
 }
 
 struct list *eval_str(const char *str)
 {
-    return eval_str_env(str, NULL);
+    struct list env;
+    memset(&env, 0, sizeof(env));
+    return eval_str_env(str, &env);
 }
 
 struct list *eval_env(struct list *expr, struct list *env)
