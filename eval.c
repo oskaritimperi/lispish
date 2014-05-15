@@ -139,8 +139,8 @@ struct list *eval_env(struct list *expr, struct list *env)
                 return list_append(NULL, &nil_atom);
             }
 
-            a = eval(a);
-            b = eval(b);
+            a = eval_env(a, env);
+            b = eval_env(b, env);
 
             if (atom_cmp(a, b))
                 return list_append(NULL, &true_atom);
@@ -159,8 +159,8 @@ struct list *eval_env(struct list *expr, struct list *env)
             if (!a || !b)
                 return list_append(NULL, &nil_atom);
 
-            a = eval(a);
-            b = eval(b);
+            a = eval_env(a, env);
+            b = eval_env(b, env);
 
             if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
                 return list_append(NULL, &nil_atom);
@@ -198,8 +198,8 @@ struct list *eval_env(struct list *expr, struct list *env)
             if (!a || !b)
                 return list_append(NULL, &nil_atom);
 
-            a = eval(a);
-            b = eval(b);
+            a = eval_env(a, env);
+            b = eval_env(b, env);
 
             if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
                 return list_append(NULL, &nil_atom);
@@ -221,12 +221,12 @@ struct list *eval_env(struct list *expr, struct list *env)
             if (!predicate || !true_case || !false_case)
                 return list_append(NULL, &nil_atom);
 
-            predicate = eval(predicate);
+            predicate = eval_env(predicate, env);
 
             if (IS_TRUE(predicate))
-                return eval(true_case);
+                return eval_env(true_case, env);
             else
-                return eval(false_case);
+                return eval_env(false_case, env);
         }
         else if (strcmp(sym, "mod") == 0)
         {
@@ -238,6 +238,9 @@ struct list *eval_env(struct list *expr, struct list *env)
                 printf("error: mod takes two arguments\n");
                 return list_append(NULL, &nil_atom);
             }
+
+            a = eval_env(a, env);
+            b = eval_env(b, env);
 
             if (!IS_INT(a) || !IS_INT(b))
             {
