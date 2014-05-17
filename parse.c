@@ -1,6 +1,5 @@
 #include "parse.h"
 #include "tokens.h"
-#include "list.h"
 #include "atom.h"
 
 #include <stdio.h>
@@ -8,134 +7,136 @@
 #include <string.h>
 #include <ctype.h>
 
-void print_list(struct list *list, int level)
+struct atom *parse_token(struct token *token)
 {
-    while (list)
+    switch (token->type)
     {
-        struct atom *atom = LIST_GET_ATOM(list);
+    case TOKEN_INT:
+        return atom_new_int(strtol(token->s, NULL, 10));
 
-        if (IS_TRUE(list))
-        {
-            printf("#t");
-        }
-        else if (IS_FALSE(list))
-        {
-            printf("#f");
-        }
-        else if (IS_NIL(list))
-        {
-            printf("nil");
-        }
+    case TOKEN_STR:
+        return atom_new_str(token->s, token->len);
+
+    case TOKEN_SYMBOL:
+        if (strncmp(token->s, "#t", 2) == 0)
+            return &true_atom;
+        else if (strncmp(token->s, "#f", 2) == 0)
+            return &false_atom;
         else
-        {
-            switch (atom->type)
-            {
-                case ATOM_SYMBOL:
-                    printf("%.*s", atom->str.len, atom->str.str);
-                    break;
+            return atom_new_sym(token->s, token->len);
 
-                case ATOM_LIST:
-                    printf("(");
-                    print_list(atom->list, level+1);
-                    printf(")");
-                    break;
-
-                case ATOM_STR:
-                    printf("\"%.*s\"", atom->str.len, atom->str.str);
-                    break;
-
-                case ATOM_INT:
-                    printf("%ld", atom->l);
-            }
-        }
-
-        if (list->next)
-            printf(" ");
-
-        list = list->next;
+    default:
+        return NULL;
     }
 
-    if (level == 0)
-        printf("\n");
+    return NULL;
 }
 
-int parse_next(const char *src, int *pos, struct atom **result)
+void parse_quote(const char *src, int *pos, struct atom **result)
+{
+    struct atom *value = parse(src, pos);
+    struct atom *q = atom_new_sym("quote", 5);
+    struct atom *form = atom_new_list_empty();
+
+    LIST_INSERT_HEAD(form->list, q, entries);
+    LIST_INSERT_AFTER(q, value, entries);
+
+    *result = form;
+}
+
+int parse_list(const char *src, int *pos, struct atom **result)
 {
     struct token token;
     int rc;
+    struct list *list;
+    struct atom *last = NULL;
 
-    if ((rc = get_next_token(src, pos, &token)) > 0)
+    list = calloc(1, sizeof(*list));
+    LIST_INIT(list);
+
+    while ((rc = get_next_token(src, pos, &token)))
     {
-        switch (token.type)
-        {
-            case TOKEN_INT:
-                *result = atom_new_int(strtol(token.s, NULL, 10));
-                break;
+        struct atom *atom;
 
-            case TOKEN_STR:
-                *result = atom_new_str(token.s, token.len);
-                break;
-
-            case TOKEN_SYMBOL:
-                if (strncmp(token.s, "#t", 2) == 0)
-                    *result = &true_atom;
-                else if (strncmp(token.s, "#f", 2) == 0)
-                    *result = &false_atom;
-                else
-                    *result = atom_new_sym(token.s, token.len);
-                break;
-
-            case TOKEN_LPAREN:
-            {
-                struct list *l = parse(src, pos);
-                *result = atom_new_list(l);
-                break;
-            }
-
-            case TOKEN_RPAREN:
-                return -2;
-
-            case TOKEN_QUOTE:
-            {
-                struct atom *quoted = NULL;
-
-                parse_next(src, pos, &quoted);
-
-                struct list *qlist = list_append(NULL,
-                    atom_new_sym("quote", 5));
-
-                list_append(qlist, quoted);
-
-                *result = atom_new_list(qlist);
-
-                break;
-            }
-        }
-    }
-
-    return rc;
-}
-
-struct list *parse(const char *src, int *pos)
-{
-    int rc;
-    struct atom *atom;
-    struct list root, *last = &root;
-
-    list_init(last);
-
-    while ((rc = parse_next(src, pos, &atom)))
-    {
         if (rc < 0)
             break;
 
-        last = list_append(last, atom);
+        switch (token.type)
+        {
+        case TOKEN_LPAREN:
+            if (parse_list(src, pos, &atom) < 0)
+                return -1;
+            break;
+
+        case TOKEN_RPAREN:
+            goto out;
+            break;
+
+        case TOKEN_QUOTE:
+            parse_quote(src, pos, &atom);
+            break;
+
+        default:
+            atom = parse_token(&token);
+            break;
+        }
+
+        if (!last)
+            LIST_INSERT_HEAD(list, atom, entries);
+        else
+            LIST_INSERT_AFTER(last, atom, entries);
+
+        last = atom;
     }
 
-    if (rc < 0 && rc != -2)
+out:
+
+    if (rc < 0)
+        return rc;
+
+    if (LIST_EMPTY(list))
+    {
+        free(list);
+        *result = &nil_atom;
+        return 1;
+    }
+
+    *result = atom_new_list(list);
+    return 1;
+}
+
+struct atom *parse(const char *src, int *pos)
+{
+    struct token token;
+    struct atom *atom = NULL;
+    int rc;
+
+    rc = get_next_token(src, pos, &token);
+
+    if (rc < 0)
         return NULL;
 
-    return root.next;
+    switch (token.type)
+    {
+    case TOKEN_LPAREN:
+        if (parse_list(src, pos, &atom) < 0)
+            atom = NULL;
+        break;
+
+    case TOKEN_RPAREN:
+        printf("syntax error: unexpected ')'\n");
+        break;
+
+    case TOKEN_QUOTE:
+        parse_quote(src, pos, &atom);
+        break;
+
+    default:
+        atom = parse_token(&token);
+        break;
+    }
+
+    return atom;
 }
 
 #ifdef BUILD_TEST
@@ -151,34 +152,51 @@ static const char *test_src_fact =
     "            (* n (fact (- n 1))))))\n"
     "(fact 5) ;; this should evaluate to 120\n";
 
-#define ASSERT_SYM(LIST, SYM) \
-    ASSERT_TRUE(IS_SYM(LIST)); \
-    ASSERT_STREQ(SYM, LIST_GET_ATOM(LIST)->str.str)
+#define ASSERT_SYM(ATOM, SYM) \
+    ASSERT_TRUE(IS_SYM(ATOM)); \
+    ASSERT_STREQ(SYM, (ATOM)->str.str)
 
 TEST(test_parse)
 {
     int pos = 0;
-    struct list *list;
+    struct atom *list;
 
     list = parse(test_src_fact, &pos);
 
     ASSERT_TRUE(list != NULL);
-
     ASSERT_TRUE(IS_LIST(list));
 
-    list = LIST_GET_ATOM(list)->list;
+    struct atom *a = CAR(list->list);
+    ASSERT_TRUE(a != NULL);
+    ASSERT_SYM(a, "define");
 
-    ASSERT_TRUE(list != NULL);
-    ASSERT_SYM(list, "define");
+    a = CDR(a);
 
-    list = list->next;
+    ASSERT_TRUE(a != NULL);
+    ASSERT_SYM(a, "fact");
 
-    ASSERT_TRUE(list != NULL);
-    ASSERT_SYM(list, "fact");
+    a = CDR(a);
 
-    list = list->next;
+    ASSERT_TRUE(a != NULL);
+}
 
-    ASSERT_TRUE(list != NULL);
+TEST(parse_quote)
+{
+    int pos = 0;
+
+    struct atom *result = parse("'foobar", &pos);
+    ASSERT_TRUE(result != NULL);
+    ASSERT_EQ(ATOM_LIST, result->type);
+
+    struct atom *op = CAR(result->list);
+    ASSERT_TRUE(op != NULL);
+    ASSERT_EQ(ATOM_SYMBOL, op->type);
+    ASSERT_STREQ("quote", op->str.str);
+
+    struct atom *a = CDR(op);
+    ASSERT_TRUE(a != NULL);
+    ASSERT_EQ(ATOM_SYMBOL, a->type);
+    ASSERT_STREQ("foobar", a->str.str);
 }
 
 #endif

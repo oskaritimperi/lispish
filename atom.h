@@ -1,24 +1,23 @@
 #ifndef ATOM_H
 #define ATOM_H
 
-#define LIST_GET_ATOM(LIST) ((struct atom *) (LIST)->data)
+#include <sys/queue.h>
 
-#define ATOM_TYPE(LIST) ((LIST_GET_ATOM(LIST))->type)
+#define ATOM_TYPE(ATOM) ((ATOM)->type)
 
-#define IS_INT(LIST) ((ATOM_TYPE(LIST)) == ATOM_INT)
-#define IS_STR(LIST) ((ATOM_TYPE(LIST)) == ATOM_STR)
-#define IS_SYM(LIST) ((ATOM_TYPE(LIST)) == ATOM_SYMBOL)
-#define IS_LIST(LIST) ((ATOM_TYPE(LIST)) == ATOM_LIST)
-#define IS_ATOM(LIST) (!(IS_LIST(LIST)))
+#define IS_INT(ATOM) ((ATOM_TYPE(ATOM)) == ATOM_INT)
+#define IS_STR(ATOM) ((ATOM_TYPE(ATOM)) == ATOM_STR)
+#define IS_SYM(ATOM) ((ATOM_TYPE(ATOM)) == ATOM_SYMBOL)
+#define IS_LIST(ATOM) ((ATOM_TYPE(ATOM)) == ATOM_LIST)
+#define IS_ATOM(ATOM) (!(IS_LIST(ATOM)))
 
-#define IS_TRUE(LIST) (LIST_GET_ATOM(LIST) == &true_atom)
-#define IS_FALSE(LIST) (LIST_GET_ATOM(LIST) == &false_atom)
+#define IS_TRUE(ATOM) (ATOM_TYPE(ATOM) == ATOM_TRUE)
+#define IS_FALSE(ATOM) (ATOM_TYPE(ATOM) == ATOM_FALSE)
 
-#define IS_NIL(LIST) (LIST_GET_ATOM(LIST) == &nil_atom)
+#define IS_NIL(ATOM) (ATOM_TYPE(ATOM) == ATOM_NIL)
 
-#define CAR(LIST) LIST
-
-#define CDR(LIST) ((LIST) != NULL ? (LIST)->next : NULL)
+#define CAR(LIST) (LIST_FIRST(LIST))
+#define CDR(LIST) ((LIST) != NULL ? LIST_NEXT((LIST), entries) : NULL)
 #define CDDR(LIST) CDR(CDR(LIST))
 
 enum
@@ -32,11 +31,14 @@ enum
     ATOM_FALSE
 };
 
-struct list;
+struct atom;
+
+LIST_HEAD(list, atom);
 
 struct atom
 {
     char type;
+
     union
     {
         long l;
@@ -47,6 +49,8 @@ struct atom
         } str;
         struct list *list;
     };
+
+    LIST_ENTRY(atom) entries;
 };
 
 struct atom *atom_new(char type);
@@ -54,7 +58,10 @@ struct atom *atom_new_int(long l);
 struct atom *atom_new_str(const char *str, int len);
 struct atom *atom_new_sym(const char *sym, int len);
 struct atom *atom_new_list(struct list *list);
+struct atom *atom_new_list_empty();
 struct atom *atom_clone();
+
+void print_atom(struct atom *atom, int level);
 
 extern struct atom true_atom;
 extern struct atom false_atom;

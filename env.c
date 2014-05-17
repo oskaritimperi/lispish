@@ -1,5 +1,4 @@
 #include "env.h"
-#include "list.h"
 #include "atom.h"
 
 #include <stdlib.h>
@@ -10,75 +9,72 @@ struct kv
 {
     const char *symbol;
     struct atom *value;
+    LIST_ENTRY(kv) entries;
 };
 
-struct list *env_new()
+struct env *env_new()
 {
-    return list_new(NULL);
+    struct env *env = calloc(1, sizeof(*env));
+    LIST_INIT(env);
+    return env;
 }
 
-struct atom *env_lookup(struct list *env, const char *symbol)
+struct atom *env_lookup(struct env *env, const char *symbol)
 {
-    env = env->next;
-    while (env)
+    struct kv *elem;
+    LIST_FOREACH(elem, env, entries)
     {
-        struct kv *kv = (struct kv *) env->data;
-
-        if (strcmp(kv->symbol, symbol) == 0)
-        {
-            return kv->value;
-        }
-
-        env = env->next;
+        if (strcmp(elem->symbol, symbol) == 0)
+            return elem->value;
     }
+
     return NULL;
 }
 
-int env_set_(struct list *env, const char *symbol,
+int env_set_(struct env *env, const char *symbol,
     struct atom *atom, int force)
 {
-    struct list *first = env;
+    struct kv *elem = NULL;
     struct kv *kv;
 
-    env = env->next;
-    while (env)
+    LIST_FOREACH(elem, env, entries)
     {
-        kv = (struct kv *) env->data;
-
-        if (strcmp(symbol, kv->symbol) == 0)
+        if (strcmp(symbol, elem->symbol) == 0)
         {
             if (!force)
                 return 0;
 
-            kv->value = atom;
+            elem->value = atom;
 
             return 1;
         }
 
-        if (!env->next)
+        if (!LIST_NEXT(elem, entries))
             break;
-
-        env = env->next;
     }
-
-    if (!env)
-        env = first;
 
     kv = calloc(1, sizeof(*kv));
     kv->symbol = strdup(symbol);
     kv->value = atom;
 
-    list_append(env, kv);
+    if (LIST_EMPTY(env))
+    {
+        LIST_INSERT_HEAD(env, kv, entries);
+    }
+    else
+    {
+        LIST_INSERT_AFTER(elem, kv, entries);
+    }
 
     return 1;
 }
 
-struct list *env_extend(struct list *env, int count, ...)
+struct env *env_extend(struct env *env, int count, ...)
 {
     va_list ap;
     int i;
 
-    struct list *result = env_clone(env);
+    struct env *result = env_clone(env);
 
     va_start(ap, count);
 
@@ -94,40 +90,35 @@ struct list *env_extend(struct list *env, int count, ...)
     return result;
 }
 
-// struct list *env_extend_env(struct list *enva, struct list *envb)
-// {
-
-// }
-
-int env_set(struct list *env, const char *symbol,
+int env_set(struct env *env, const char *symbol,
     struct atom *value)
 {
     return env_set_(env, symbol, value, 0);
 }
 
-void env_free(struct list *env)
+void env_free(struct env *env)
 {
 
 }
 
-struct list *env_clone(struct list *env)
+struct env *env_clone(struct env *env)
 {
-    struct list *clone = env_new();
-    struct list *last = clone;
+    struct env *clone = env_new();
+    struct kv *elem, *last;
 
-    env = env->next;
-    while (env)
+    LIST_FOREACH(elem, env, entries)
     {
-        struct kv *kv = (struct kv *) env->data;
+        struct kv *kv_clone = calloc(1, sizeof(*kv_clone));
 
-        struct kv *kv_clone = malloc(sizeof(*kv_clone));
+        kv_clone->symbol = strdup(elem->symbol);
+        kv_clone->value = atom_clone(elem->value);
 
-        kv_clone->symbol = strdup(kv->symbol);
-        kv_clone->value = atom_clone(kv->value);
+        if (LIST_EMPTY(clone))
+            LIST_INSERT_HEAD(clone, kv_clone, entries);
+        else
+            LIST_INSERT_AFTER(last, kv_clone, entries);
 
-        last = list_append(last, kv_clone);
-
-        env = env->next;
+        last = kv_clone;
     }
 
     return clone;
@@ -139,14 +130,14 @@ struct list *env_clone(struct list *env)
 
 TEST(simple_lookup_on_empty_env)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
     ASSERT_TRUE(env != NULL);
     ASSERT_EQ(NULL, env_lookup(env, "foobar"));
 }
 
 TEST(simple_set_and_lookup)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
     ASSERT_TRUE(env != NULL);
 
     struct atom atom;
@@ -157,13 +148,13 @@ TEST(simple_set_and_lookup)
 
 TEST(lookup_from_inner_env)
 {
-    struct list *outer = env_new();
+    struct env *outer = env_new();
 
     struct atom *atom1 = atom_new_int(42);
     ASSERT_EQ(1, env_set(outer, "foo", atom1));
 
     struct atom *atom2 = atom_new_int(6);
-    struct list *inner = env_extend(outer, 1, "bar", atom2);
+    struct env *inner = env_extend(outer, 1, "bar", atom2);
 
     ASSERT_TRUE(inner != NULL);
     ASSERT_TRUE(inner != outer);
@@ -181,7 +172,7 @@ TEST(lookup_from_inner_env)
 
 TEST(lookup_deeply_nested)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
     env_set(env, "a", atom_new_int(1));
     env = env_extend(env, 1, "b", atom_new_int(2));
     env = env_extend(env, 1, "c", atom_new_int(3));
@@ -201,7 +192,7 @@ TEST(lookup_deeply_nested)
 
 TEST(extend)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
 
     env_set(env, "foo", atom_new_int(1));
 
@@ -215,7 +206,7 @@ TEST(extend)
 
 TEST(redefine_illegal)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
     ASSERT_EQ(1, env_set(env, "foo", atom_new_int(1)));
     ASSERT_EQ(0, env_set(env, "foo", atom_new_int(2)));
 }

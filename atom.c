@@ -1,7 +1,7 @@
 #include "atom.h"
-#include "list.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 struct atom true_atom = { ATOM_TRUE };
@@ -44,6 +44,13 @@ struct atom *atom_new_list(struct list *list)
     return atom;
 }
 
+struct atom *atom_new_list_empty()
+{
+    struct list *list = calloc(1, sizeof(*list));
+    LIST_INIT(list);
+    return atom_new_list(list);
+}
+
 struct atom *atom_clone(struct atom *atom)
 {
     switch (atom->type)
@@ -64,24 +71,66 @@ struct atom *atom_clone(struct atom *atom)
 
     case ATOM_LIST:
     {
-        struct list *list = atom->list;
-        struct list *clone = NULL, *last = NULL;
+        struct atom *elem, *last;
 
-        while (list)
+        struct list *list_clone = calloc(1, sizeof(*list_clone));
+        LIST_INIT(list_clone);
+
+        LIST_FOREACH(elem, atom->list, entries)
         {
-            struct atom *a = LIST_GET_ATOM(list);
-            struct atom *b = atom_clone(a);
-            last = list_append(last, b);
-            list = list->next;
-            if (!clone)
-                clone = last;
+            struct atom *a_clone = atom_clone(elem);
+
+            if (LIST_EMPTY(list_clone))
+                LIST_INSERT_HEAD(list_clone, a_clone, entries);
+            else
+                LIST_INSERT_AFTER(last, a_clone, entries);
+
+            last = a_clone;
         }
 
-        return atom_new_list(clone);
+        return atom_new_list(list_clone);
     }
     }
 
     return NULL;
+}
+
+void print_atom(struct atom *atom, int level)
+{
+    switch (ATOM_TYPE(atom))
+    {
+    case ATOM_TRUE: printf("#t"); break;
+    case ATOM_FALSE: printf("#f"); break;
+    case ATOM_NIL: printf("nil"); break;
+
+    case ATOM_SYMBOL:
+        printf("%.*s", atom->str.len, atom->str.str);
+        break;
+
+    case ATOM_STR:
+        printf("\"%.*s\"", atom->str.len, atom->str.str);
+        break;
+
+    case ATOM_INT:
+        printf("%ld", atom->l);
+        break;
+
+    case ATOM_LIST:
+    {
+        printf("(");
+        struct atom *elem;
+        LIST_FOREACH(elem, atom->list, entries)
+        {
+            print_atom(elem, level+1);
+            if (LIST_NEXT(elem, entries))
+                printf(" ");
+        }
+        printf(")");
+    }
+    }
+
+    if (level == 0)
+        printf("\n");
 }
 
 #ifdef BUILD_TEST

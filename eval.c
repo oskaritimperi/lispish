@@ -1,5 +1,4 @@
 #include "eval.h"
-#include "list.h"
 #include "atom.h"
 #include "parse.h"
 #include "env.h"
@@ -7,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static int atom_cmp(struct list *a, struct list *b)
+static int atom_cmp(struct atom *a, struct atom *b)
 {
     if (ATOM_TYPE(a) != ATOM_TYPE(b))
         return 0;
@@ -35,20 +34,20 @@ static int atom_cmp(struct list *a, struct list *b)
     switch (ATOM_TYPE(a))
     {
         case ATOM_INT:
-            if (LIST_GET_ATOM(a)->l != LIST_GET_ATOM(b)->l)
+            if (a->l != b->l)
                 result = 0;
             break;
 
         case ATOM_STR:
         case ATOM_SYMBOL:
-            if (strcmp(LIST_GET_ATOM(a)->str.str, LIST_GET_ATOM(b)->str.str) != 0)
+            if (strcmp(a->str.str, b->str.str) != 0)
                 result = 0;
             break;
 
         case ATOM_LIST:
         {
-            struct list *ai = LIST_GET_ATOM(a)->list;
-            struct list *bi = LIST_GET_ATOM(b)->list;
+            struct atom *ai = LIST_FIRST(a->list);
+            struct atom *bi = LIST_FIRST(b->list);
 
             while (ai && bi)
             {
@@ -58,8 +57,8 @@ static int atom_cmp(struct list *a, struct list *b)
                     break;
                 }
 
-                ai = ai->next;
-                bi = bi->next;
+                ai = LIST_NEXT(ai, entries);
+                bi = LIST_NEXT(bi, entries);
             }
 
             if (ai != NULL || bi != NULL)
@@ -72,225 +71,198 @@ static int atom_cmp(struct list *a, struct list *b)
     return result;
 }
 
-struct list *eval(struct list *list)
-{
-    struct list env;
-    memset(&env, 0, sizeof(env));
-    return eval_env(list, &env);
-}
-
-struct list *eval_str(const char *str)
-{
-    struct list env;
-    memset(&env, 0, sizeof(env));
-    return eval_str_env(str, &env);
-}
-
-struct list *eval_env(struct list *expr, struct list *env)
+struct atom *eval(struct atom *expr, struct env *env)
 {
     if (IS_SYM(expr))
     {
-        struct atom *atom = env_lookup(env, LIST_GET_ATOM(expr)->str.str);
+        struct atom *atom = env_lookup(env, expr->str.str);
 
         if (atom)
         {
-            return list_append(NULL, atom);
+            return atom;
         }
         else
         {
             printf("error: undefined variable: %s\n",
-                LIST_GET_ATOM(expr)->str.str);
-            return list_append(NULL, &nil_atom);
+                expr->str.str);
+            return &nil_atom;
         }
     }
 
     if (!IS_LIST(expr))
         return expr;
 
-    struct list *l = LIST_GET_ATOM(expr)->list;
+    struct list *list = expr->list;
 
-    if (IS_SYM(l))
+    struct atom *op = LIST_FIRST(list);
+
+    if (strcmp(op->str.str, "quote") == 0)
     {
-        const char *sym = LIST_GET_ATOM(l)->str.str;
-
-        if (strcmp(sym, "quote") == 0)
-        {
-            return l->next;
-        }
-        else if (strcmp(sym, "atom") == 0)
-        {
-            if (IS_LIST(l->next))
-            {
-                return list_append(NULL, &false_atom);
-            }
-            else
-            {
-                return list_append(NULL, &true_atom);
-            }
-        }
-        else if (strcmp(sym, "eq") == 0)
-        {
-            struct list *a = CDR(l);
-            struct list *b = CDR(a);
-
-            if (!a || !b)
-            {
-                printf("error: eq takes 2 arguments\n");
-                return list_append(NULL, &nil_atom);
-            }
-
-            a = eval_env(a, env);
-            b = eval_env(b, env);
-
-            if (atom_cmp(a, b))
-                return list_append(NULL, &true_atom);
-
-            return list_append(NULL, &false_atom);
-        }
-        else if (strncmp(sym, "+", 1) == 0 ||
-                 strncmp(sym, "-", 1) == 0 ||
-                 strncmp(sym, "/", 1) == 0 ||
-                 strncmp(sym, "*", 1) == 0)
-        {
-            struct list *oper = CAR(l);
-            struct list *a = CDR(oper);
-            struct list *b = CDDR(oper);
-
-            if (!a || !b)
-                return list_append(NULL, &nil_atom);
-
-            a = eval_env(a, env);
-            b = eval_env(b, env);
-
-            if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
-                return list_append(NULL, &nil_atom);
-
-            long numa = LIST_GET_ATOM(a)->l;
-            long numb = LIST_GET_ATOM(b)->l;
-            long numr;
-
-            switch (*sym)
-            {
-                case '+':
-                    numr = numa + numb;
-                    break;
-                case '-':
-                    numr = numa - numb;
-                    break;
-                case '/':
-                    numr = numa / numb;
-                    break;
-                case '*':
-                    numr = numa * numb;
-                    break;
-            }
-
-            struct list *result = list_append(NULL, atom_new_int(numr));
-
-            return result;
-        }
-        else if (strncmp(sym, ">", 1) == 0)
-        {
-            struct list *oper = CAR(l);
-            struct list *a = CDR(oper);
-            struct list *b = CDDR(oper);
-
-            if (!a || !b)
-                return list_append(NULL, &nil_atom);
-
-            a = eval_env(a, env);
-            b = eval_env(b, env);
-
-            if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
-                return list_append(NULL, &nil_atom);
-
-            long numa = LIST_GET_ATOM(a)->l;
-            long numb = LIST_GET_ATOM(b)->l;
-
-            if (numa > numb)
-                return list_append(NULL, &true_atom);
-            else
-                return list_append(NULL, &false_atom);
-        }
-        else if (strcmp(sym, "if") == 0)
-        {
-            struct list *predicate = CDR(l);
-            struct list *true_case = CDR(predicate);
-            struct list *false_case = CDR(true_case);
-
-            if (!predicate || !true_case || !false_case)
-                return list_append(NULL, &nil_atom);
-
-            predicate = eval_env(predicate, env);
-
-            if (IS_TRUE(predicate))
-                return eval_env(true_case, env);
-            else
-                return eval_env(false_case, env);
-        }
-        else if (strcmp(sym, "mod") == 0)
-        {
-            struct list *a = CDR(l);
-            struct list *b = CDR(a);
-
-            if (!a || !b)
-            {
-                printf("error: mod takes two arguments\n");
-                return list_append(NULL, &nil_atom);
-            }
-
-            a = eval_env(a, env);
-            b = eval_env(b, env);
-
-            if (!IS_INT(a) || !IS_INT(b))
-            {
-                printf("error: mod arguments must be integers\n");
-                return list_append(NULL, &nil_atom);
-            }
-
-            long result = LIST_GET_ATOM(a)->l % LIST_GET_ATOM(b)->l;
-
-            return list_append(NULL, atom_new_int(result));
-        }
-        else if (strcmp(sym, "define") == 0)
-        {
-            struct list *expr_name = CDR(l);
-            struct list *expr_value = CDR(expr_name);
-
-            if (!expr_name || !expr_value)
-            {
-                printf("error: define takes two arguments\n");
-                return list_append(NULL, &nil_atom);
-            }
-
-            if (!IS_SYM(expr_name))
-            {
-                printf("error: define: first arg must be symbol\n");
-                return list_append(NULL, &nil_atom);
-            }
-
-            expr_value = eval_env(expr_value, env);
-
-            env_set(env, LIST_GET_ATOM(expr_name)->str.str,
-                LIST_GET_ATOM(expr_value));
-
-            return list_append(NULL, expr_value);
-        }
+        return atom_clone(LIST_NEXT(op, entries));
     }
-    else if (IS_LIST(l))
+    else if (strcmp(op->str.str, "atom") == 0)
     {
-        return eval(l);
+        struct atom *a = LIST_NEXT(op, entries);
+
+        if (!a)
+            return &nil_atom;
+
+        if (IS_LIST(a))
+            return &false_atom;
+        else
+            return &true_atom;
+    }
+    else if (strcmp(op->str.str, "eq") == 0)
+    {
+        struct atom *a = CDR(op);
+        struct atom *b = CDR(a);
+
+        if (!a || !b)
+        {
+            printf("error: eq takes 2 arguments\n");
+            return &nil_atom;
+        }
+
+        a = eval(a, env);
+        b = eval(b, env);
+
+        if (atom_cmp(a, b))
+            return &true_atom;
+
+        return &false_atom;
+    }
+    else if (strcmp(op->str.str, "+") == 0 ||
+             strcmp(op->str.str, "-") == 0 ||
+             strcmp(op->str.str, "/") == 0 ||
+             strcmp(op->str.str, "*") == 0)
+    {
+        struct atom *a = CDR(op);
+        struct atom *b = CDR(a);
+
+        if (!a || !b)
+        {
+            printf("error: %s takes 2 arguments\n", op->str.str);
+            return &nil_atom;
+        }
+
+        a = eval(a, env);
+        b = eval(b, env);
+
+        if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
+            return &nil_atom;
+
+        switch (*op->str.str)
+        {
+            case '+': return atom_new_int(a->l + b->l);
+            case '-': return atom_new_int(a->l - b->l);
+            case '/': return atom_new_int(a->l / b->l);
+            case '*': return atom_new_int(a->l * b->l);
+        }
+
+        return &nil_atom;
+    }
+    else if (strcmp(op->str.str, ">") == 0)
+    {
+        struct atom *a = CDR(op);
+        struct atom *b = CDR(a);
+
+        if (!a || !b)
+        {
+            printf("error: > takes 2 arguments\n");
+            return &nil_atom;
+        }
+
+        a = eval(a, env);
+        b = eval(b, env);
+
+        if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
+            return &nil_atom;
+
+        if (a->l > b->l)
+            return &true_atom;
+
+        return &false_atom;
+    }
+    else if (strcmp(op->str.str, "if") == 0)
+    {
+        struct atom *predicate = CDR(op);
+        struct atom *true_case = CDR(predicate);
+        struct atom *false_case = CDR(true_case);
+
+        if (!predicate || !true_case || !false_case)
+        {
+            printf("error: if takes 3 arguments\n");
+            return &nil_atom;
+        }
+
+        predicate = eval(predicate, env);
+
+        if (IS_TRUE(predicate))
+            return eval(true_case, env);
+
+        return eval(false_case, env);
+    }
+    else if (strcmp(op->str.str, "mod") == 0)
+    {
+        struct atom *a = CDR(op);
+        struct atom *b = CDR(a);
+
+        if (!a || !b)
+        {
+            printf("error: mod takes two arguments\n");
+            return &nil_atom;
+        }
+
+        a = eval(a, env);
+        b = eval(b, env);
+
+        if (!IS_INT(a) || !IS_INT(b))
+        {
+            printf("error: mod arguments must be integers\n");
+            return &nil_atom;
+        }
+
+        return atom_new_int(a->l % b->l);
+    }
+    else if (strcmp(op->str.str, "define") == 0)
+    {
+        struct atom *expr_name = CDR(op);
+        struct atom *expr_value = CDR(expr_name);
+
+        if (!expr_name || !expr_value)
+        {
+            printf("error: define takes two arguments\n");
+            return &nil_atom;
+        }
+
+        if (!IS_SYM(expr_name))
+        {
+            printf("error: define: first arg must be symbol\n");
+            return &nil_atom;
+        }
+
+        expr_value = eval(expr_value, env);
+
+        if (!env_set(env, expr_name->str.str, expr_value))
+        {
+            printf("error: cannot redefine %s\n", expr_name->str.str);
+            return &nil_atom;
+        }
+
+        return expr_value;
     }
 
-    return list_append(NULL, &nil_atom);
+    printf("error: unknown function %s\n", op->str.str);
+
+    return &nil_atom;
 }
 
-struct list *eval_str_env(const char *expr, struct list *env)
+struct atom *eval_str(const char *expr, struct env *env)
 {
-    struct list *result;
+    struct atom *result;
     int pos = 0;
 
-    result = eval_env(parse(expr, &pos), env);
+    result = eval(parse(expr, &pos), env);
 
     return result;
 }
@@ -301,46 +273,48 @@ struct list *eval_str_env(const char *expr, struct list *env)
 
 TEST(nested_expression)
 {
-    struct list *result = eval_str("(eq #f (> (- (+ 1 3) (* 2 (mod 7 4))) 4))");
+    struct env *env = env_new();
+    struct atom *result = eval_str("(eq #f (> (- (+ 1 3) (* 2 (mod 7 4))) 4))", env);
     ASSERT_TRUE(result != NULL);
     ASSERT_TRUE(IS_TRUE(result));
 }
 
 TEST(basic_if)
 {
-    struct list *result = eval_str("(if #t 42 1000)");
+    struct env *env = env_new();
+    struct atom *result = eval_str("(if #t 42 1000)", env);
+    print_atom(result, 0);
     ASSERT_TRUE(result != NULL);
     ASSERT_EQ(ATOM_INT, ATOM_TYPE(result));
-    ASSERT_EQ(42, LIST_GET_ATOM(result)->l);
+    ASSERT_EQ(42, result->l);
 }
 
 TEST(if_with_sub_expressions)
 {
-    struct list *result = eval_str("(if (> 1 2) (- 1000 1) (+ 40 (- 3 1)))");
+    struct env *env = env_new();
+    struct atom *result = eval_str("(if (> 1 2) (- 1000 1) (+ 40 (- 3 1)))", env);
     ASSERT_TRUE(result != NULL);
     ASSERT_EQ(ATOM_INT, ATOM_TYPE(result));
-    ASSERT_EQ(42, LIST_GET_ATOM(result)->l);
+    ASSERT_EQ(42, result->l);
 }
-
-/* EVALUTE WITH ENVIRONMENT TESTS */
 
 TEST(evaluate_symbol)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
     env_set(env, "foo", atom_new_int(42));
 
-    struct list *result = eval_str_env("foo", env);
+    struct atom *result = eval_str("foo", env);
 
     ASSERT_TRUE(result != NULL);
     ASSERT_EQ(ATOM_INT, ATOM_TYPE(result));
-    ASSERT_EQ(42, LIST_GET_ATOM(result)->l);
+    ASSERT_EQ(42, result->l);
 }
 
 TEST(evaluate_missing_symbol)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
 
-    struct list *result = eval_str_env("foo", env);
+    struct atom *result = eval_str("foo", env);
 
     ASSERT_TRUE(result != NULL);
     ASSERT_EQ(ATOM_NIL, ATOM_TYPE(result));
@@ -348,9 +322,9 @@ TEST(evaluate_missing_symbol)
 
 TEST(define)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
 
-    struct list *result = eval_str_env("(define x 100)", env);
+    struct atom *result = eval_str("(define x 100)", env);
 
     ASSERT_TRUE(result != NULL);
 
@@ -363,9 +337,9 @@ TEST(define)
 
 TEST(define_missing_value)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
 
-    struct list *result = eval_str_env("(define x)", env);
+    struct atom *result = eval_str("(define x)", env);
     ASSERT_TRUE(result != NULL);
     ASSERT_EQ(ATOM_NIL, ATOM_TYPE(result));
 
@@ -375,18 +349,18 @@ TEST(define_missing_value)
 
 TEST(define_nonsymbol_as_name)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
 
-    struct list *result = eval_str_env("(define 1 100)", env);
+    struct atom *result = eval_str("(define 1 100)", env);
     ASSERT_TRUE(result != NULL);
     ASSERT_EQ(ATOM_NIL, ATOM_TYPE(result));
 }
 
 TEST(define_with_val_as_expr)
 {
-    struct list *env = env_new();
+    struct env *env = env_new();
 
-    struct list *result = eval_str_env("(define x (* 3 3))", env);
+    struct atom *result = eval_str("(define x (* 3 3))", env);
 
     ASSERT_TRUE(result != NULL);
 
@@ -396,6 +370,5 @@ TEST(define_with_val_as_expr)
     ASSERT_EQ(ATOM_INT, atom->type);
     ASSERT_EQ(9, atom->l);
 }
-
 
 #endif /* BUILD_TEST */

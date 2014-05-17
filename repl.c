@@ -4,14 +4,14 @@
 
 #include "parse.h"
 #include "eval.h"
-#include "list.h"
 #include "env.h"
+#include "atom.h"
 #include "linenoise.h"
 
 int main(int argc, char **argv)
 {
     char *line;
-    struct list *env;
+    struct env *env;
 
     env = env_new();
 
@@ -23,12 +23,13 @@ int main(int argc, char **argv)
 
         if (strcmp(".clean", line) == 0)
         {
+            env_free(env);
             env = env_new();
         }
         else
         {
-            struct list *result = eval_str_env(line, env);
-            print_list(result, 0);
+            struct atom *result = eval_str(line, env);
+            print_atom(result, 0);
         }
 
         free(line);
