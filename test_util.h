@@ -30,7 +30,7 @@
     void test_util_add_test(const char *name, void (*func)()); \
     INITIALIZER(test_##NAME##_init) \
     { \
-        test_util_add_test(#NAME, &test_##NAME); \
+        test_util_add_test(__FILE__ "_" #NAME, &test_##NAME); \
     } \
     static void test_##NAME()
 
