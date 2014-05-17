@@ -63,12 +63,15 @@
         return 0; \
     }
 
+#define FG_RED "\x1b[31m"
+#define FG_RESET "\x1b[39m"
+
 #define ASSERT(X) \
     do { \
         if (!(X)) { \
-            fprintf(stderr, "assertion %s failed at %s:%d\n", \
+            fprintf(stderr, FG_RED "assertion %s failed at %s:%d\n" FG_RESET, \
                     #X, __FILE__, __LINE__); \
-            exit(1); \
+            return; \
         } \
     } while (0)
 
@@ -77,7 +80,7 @@
         if (!(X)) { \
             fprintf(stderr, "assertion %s failed at %s:%d (" FMT ")\n", \
                     #X, __FILE__, __LINE__, ##__VA_ARGS__); \
-            exit(1); \
+            return; \
         } \
     } while (0)
 
