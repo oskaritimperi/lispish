@@ -71,6 +71,208 @@ static int atom_cmp(struct atom *a, struct atom *b)
     return result;
 }
 
+struct atom *builtin_quote(struct atom *expr, struct env *env)
+{
+    struct list *list = expr->list;
+    struct atom *op = LIST_FIRST(list);
+    return atom_clone(LIST_NEXT(op, entries));
+}
+
+struct atom *builtin_atom(struct atom *expr, struct env *env)
+{
+    struct list *list = expr->list;
+    struct atom *op = LIST_FIRST(list);
+    struct atom *a = LIST_NEXT(op, entries);
+
+    if (!a)
+        return &nil_atom;
+
+    if (IS_LIST(a))
+        return &false_atom;
+    else
+        return &true_atom;
+}
+
+struct atom *builtin_eq(struct atom *expr, struct env *env)
+{
+    struct list *list = expr->list;
+    struct atom *op = LIST_FIRST(list);
+    struct atom *a = CDR(op);
+    struct atom *b = CDR(a);
+
+    if (!a || !b)
+    {
+        printf("error: eq takes 2 arguments\n");
+        return &nil_atom;
+    }
+
+    a = eval(a, env);
+    b = eval(b, env);
+
+    if (atom_cmp(a, b))
+        return &true_atom;
+
+    return &false_atom;
+}
+
+struct atom *builtin_basic_arithmetic(struct atom *expr, struct env *env)
+{
+    struct list *list = expr->list;
+    struct atom *op = LIST_FIRST(list);
+    struct atom *a = CDR(op);
+    struct atom *b = CDR(a);
+
+    if (!a || !b)
+    {
+        printf("error: %s takes 2 arguments\n", op->str.str);
+        return &nil_atom;
+    }
+
+    a = eval(a, env);
+    b = eval(b, env);
+
+    if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
+    {
+        printf("error: %s works only for integers at the moment\n",
+            op->str.str);
+        return &nil_atom;
+    }
+
+    switch (*op->str.str)
+    {
+        case '+': return atom_new_int(a->l + b->l);
+        case '-': return atom_new_int(a->l - b->l);
+        case '/': return atom_new_int(a->l / b->l);
+        case '*': return atom_new_int(a->l * b->l);
+    }
+
+    return &nil_atom;
+}
+
+struct atom *builtin_gt(struct atom *expr, struct env *env)
+{
+    struct list *list = expr->list;
+    struct atom *op = LIST_FIRST(list);
+    struct atom *a = CDR(op);
+    struct atom *b = CDR(a);
+
+    if (!a || !b)
+    {
+        printf("error: > takes 2 arguments\n");
+        return &nil_atom;
+    }
+
+    a = eval(a, env);
+    b = eval(b, env);
+
+    if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
+        return &nil_atom;
+
+    if (a->l > b->l)
+        return &true_atom;
+
+    return &false_atom;
+}
+
+struct atom *builtin_if(struct atom *expr, struct env *env)
+{
+    struct list *list = expr->list;
+    struct atom *op = LIST_FIRST(list);
+    struct atom *predicate = CDR(op);
+    struct atom *true_case = CDR(predicate);
+    struct atom *false_case = CDR(true_case);
+
+    if (!predicate || !true_case || !false_case)
+    {
+        printf("error: if takes 3 arguments\n");
+        return &nil_atom;
+    }
+
+    predicate = eval(predicate, env);
+
+    if (IS_TRUE(predicate))
+        return eval(true_case, env);
+
+    return eval(false_case, env);
+}
+
+struct atom *builtin_mod(struct atom *expr, struct env *env)
+{
+    struct list *list = expr->list;
+    struct atom *op = LIST_FIRST(list);
+    struct atom *a = CDR(op);
+    struct atom *b = CDR(a);
+
+    if (!a || !b)
+    {
+        printf("error: mod takes two arguments\n");
+        return &nil_atom;
+    }
+
+    a = eval(a, env);
+    b = eval(b, env);
+
+    if (!IS_INT(a) || !IS_INT(b))
+    {
+        printf("error: mod arguments must be integers\n");
+        return &nil_atom;
+    }
+
+    return atom_new_int(a->l % b->l);
+}
+
+struct atom *builtin_define(struct atom *expr, struct env *env)
+{
+    struct list *list = expr->list;
+    struct atom *op = LIST_FIRST(list);
+    struct atom *expr_name = CDR(op);
+    struct atom *expr_value = CDR(expr_name);
+
+    if (!expr_name || !expr_value)
+    {
+        printf("error: define takes two arguments\n");
+        return &nil_atom;
+    }
+
+    if (!IS_SYM(expr_name))
+    {
+        printf("error: define: first arg must be symbol\n");
+        return &nil_atom;
+    }
+
+    expr_value = eval(expr_value, env);
+
+    if (!env_set(env, expr_name->str.str, expr_value))
+    {
+        printf("error: cannot redefine %s\n", expr_name->str.str);
+        return &nil_atom;
+    }
+
+    return expr_value;
+}
+
+typedef struct atom *(*builtin_function_t)(struct atom *, struct env *);
+
+static struct builtin_function_def
+{
+    const char *name;
+    builtin_function_t fn;
+} builtin_function_defs[] = {
+    { "quote", &builtin_quote },
+    { "atom", &builtin_atom },
+    { "eq", &builtin_eq },
+    { "+", &builtin_basic_arithmetic },
+    { "-", &builtin_basic_arithmetic },
+    { "/", &builtin_basic_arithmetic },
+    { "*", &builtin_basic_arithmetic },
+    { ">", &builtin_gt },
+    { "if", &builtin_if },
+    { "mod", &builtin_mod },
+    { "define", &builtin_define },
+
+    { NULL, NULL }
+};
+
 struct atom *eval(struct atom *expr, struct env *env)
 {
     if (IS_SYM(expr))
@@ -93,163 +295,17 @@ struct atom *eval(struct atom *expr, struct env *env)
         return expr;
 
     struct list *list = expr->list;
-
     struct atom *op = LIST_FIRST(list);
 
-    if (strcmp(op->str.str, "quote") == 0)
+    struct builtin_function_def *def = builtin_function_defs;
+    while (def->name && def->fn)
     {
-        return atom_clone(LIST_NEXT(op, entries));
-    }
-    else if (strcmp(op->str.str, "atom") == 0)
-    {
-        struct atom *a = LIST_NEXT(op, entries);
-
-        if (!a)
-            return &nil_atom;
-
-        if (IS_LIST(a))
-            return &false_atom;
-        else
-            return &true_atom;
-    }
-    else if (strcmp(op->str.str, "eq") == 0)
-    {
-        struct atom *a = CDR(op);
-        struct atom *b = CDR(a);
-
-        if (!a || !b)
+        if (strcmp(op->str.str, def->name) == 0)
         {
-            printf("error: eq takes 2 arguments\n");
-            return &nil_atom;
+            return def->fn(expr, env);
         }
 
-        a = eval(a, env);
-        b = eval(b, env);
-
-        if (atom_cmp(a, b))
-            return &true_atom;
-
-        return &false_atom;
-    }
-    else if (strcmp(op->str.str, "+") == 0 ||
-             strcmp(op->str.str, "-") == 0 ||
-             strcmp(op->str.str, "/") == 0 ||
-             strcmp(op->str.str, "*") == 0)
-    {
-        struct atom *a = CDR(op);
-        struct atom *b = CDR(a);
-
-        if (!a || !b)
-        {
-            printf("error: %s takes 2 arguments\n", op->str.str);
-            return &nil_atom;
-        }
-
-        a = eval(a, env);
-        b = eval(b, env);
-
-        if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
-            return &nil_atom;
-
-        switch (*op->str.str)
-        {
-            case '+': return atom_new_int(a->l + b->l);
-            case '-': return atom_new_int(a->l - b->l);
-            case '/': return atom_new_int(a->l / b->l);
-            case '*': return atom_new_int(a->l * b->l);
-        }
-
-        return &nil_atom;
-    }
-    else if (strcmp(op->str.str, ">") == 0)
-    {
-        struct atom *a = CDR(op);
-        struct atom *b = CDR(a);
-
-        if (!a || !b)
-        {
-            printf("error: > takes 2 arguments\n");
-            return &nil_atom;
-        }
-
-        a = eval(a, env);
-        b = eval(b, env);
-
-        if (!(ATOM_TYPE(a) == ATOM_TYPE(b) && ATOM_TYPE(a) == ATOM_INT))
-            return &nil_atom;
-
-        if (a->l > b->l)
-            return &true_atom;
-
-        return &false_atom;
-    }
-    else if (strcmp(op->str.str, "if") == 0)
-    {
-        struct atom *predicate = CDR(op);
-        struct atom *true_case = CDR(predicate);
-        struct atom *false_case = CDR(true_case);
-
-        if (!predicate || !true_case || !false_case)
-        {
-            printf("error: if takes 3 arguments\n");
-            return &nil_atom;
-        }
-
-        predicate = eval(predicate, env);
-
-        if (IS_TRUE(predicate))
-            return eval(true_case, env);
-
-        return eval(false_case, env);
-    }
-    else if (strcmp(op->str.str, "mod") == 0)
-    {
-        struct atom *a = CDR(op);
-        struct atom *b = CDR(a);
-
-        if (!a || !b)
-        {
-            printf("error: mod takes two arguments\n");
-            return &nil_atom;
-        }
-
-        a = eval(a, env);
-        b = eval(b, env);
-
-        if (!IS_INT(a) || !IS_INT(b))
-        {
-            printf("error: mod arguments must be integers\n");
-            return &nil_atom;
-        }
-
-        return atom_new_int(a->l % b->l);
-    }
-    else if (strcmp(op->str.str, "define") == 0)
-    {
-        struct atom *expr_name = CDR(op);
-        struct atom *expr_value = CDR(expr_name);
-
-        if (!expr_name || !expr_value)
-        {
-            printf("error: define takes two arguments\n");
-            return &nil_atom;
-        }
-
-        if (!IS_SYM(expr_name))
-        {
-            printf("error: define: first arg must be symbol\n");
-            return &nil_atom;
-        }
-
-        expr_value = eval(expr_value, env);
-
-        if (!env_set(env, expr_name->str.str, expr_value))
-        {
-            printf("error: cannot redefine %s\n", expr_name->str.str);
-            return &nil_atom;
-        }
-
-        return expr_value;
+        ++def;
     }
 
     printf("error: unknown function %s\n", op->str.str);
