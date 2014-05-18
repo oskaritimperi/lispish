@@ -63,6 +63,9 @@ struct atom *atom_clone();
 
 void print_atom(struct atom *atom, int level);
 
+struct atom *atom_list_append(struct atom *list, int count, ...);
+int atom_list_length(struct atom *list);
+
 extern struct atom true_atom;
 extern struct atom false_atom;
 extern struct atom nil_atom;

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdarg.h>
 
 struct atom true_atom = { ATOM_TRUE };
 struct atom false_atom = { ATOM_FALSE };
@@ -138,6 +139,53 @@ void print_atom(struct atom *atom, int level)
 
     if (level == 0)
         printf("\n");
+}
+
+struct atom *atom_list_append(struct atom *list, int count, ...)
+{
+    va_list ap;
+    struct atom *atom = NULL;
+    struct atom *last;
+
+    LIST_FOREACH(last, list->list, entries)
+    {
+        if (!LIST_NEXT(last, entries))
+            break;
+    }
+
+    va_start(ap, count);
+
+    do
+    {
+        atom = va_arg(ap, struct atom *);
+
+        if (LIST_EMPTY(list->list))
+            LIST_INSERT_HEAD(list->list, atom, entries);
+        else
+            LIST_INSERT_AFTER(last, atom, entries);
+
+        last = atom;
+    } while (--count);
+
+    va_end(ap);
+
+    return list;
+}
+
+int atom_list_length(struct atom *list)
+{
+    struct atom *atom;
+    int length = 0;
+
+    if (IS_NIL(list))
+        return 0;
+
+    LIST_FOREACH(atom, list->list, entries)
+    {
+        ++length;
+    }
+
+    return length;
 }
 
 #ifdef BUILD_TEST
