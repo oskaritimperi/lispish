@@ -8,6 +8,13 @@ struct atom true_atom = { ATOM_TRUE };
 struct atom false_atom = { ATOM_FALSE };
 struct atom nil_atom = { ATOM_NIL } ;
 
+__attribute__((constructor))
+static void setup_builtin_atoms()
+{
+    nil_atom.list = calloc(1, sizeof(*nil_atom.list));
+    LIST_INIT(nil_atom.list);
+}
+
 struct atom *atom_new(char type)
 {
     struct atom *atom = calloc(1, sizeof(*atom));
