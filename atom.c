@@ -1,4 +1,5 @@
 #include "atom.h"
+#include "env.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -59,6 +60,16 @@ struct atom *atom_new_list_empty()
     return atom_new_list(list);
 }
 
+struct atom *atom_new_closure(struct atom *params, struct atom *body,
+    struct env *env)
+{
+    struct atom *atom = atom_new(ATOM_CLOSURE);
+    atom->closure.params = params;
+    atom->closure.body = body;
+    atom->closure.env = env;
+    return atom;
+}
+
 struct atom *atom_clone(struct atom *atom)
 {
     switch (atom->type)
@@ -98,6 +109,15 @@ struct atom *atom_clone(struct atom *atom)
 
         return atom_new_list(list_clone);
     }
+
+    case ATOM_CLOSURE:
+        // TODO: should we clone the env or what? If it is just plainly
+        // cloned, it leads to a infinite loop when we have a closure
+        // bound to a name in the env.
+        return atom_new_closure(atom_clone(atom->closure.params),
+            atom_clone(atom->closure.body),
+            atom->closure.env);
+        break;
     }
 
     return NULL;
@@ -134,7 +154,12 @@ void print_atom(struct atom *atom, int level)
                 printf(" ");
         }
         printf(")");
+        break;
     }
+
+    case ATOM_CLOSURE:
+        printf("<closure@%p>", atom);
+        break;
     }
 
     if (level == 0)

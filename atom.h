@@ -16,6 +16,8 @@
 
 #define IS_NIL(ATOM) (ATOM_TYPE(ATOM) == ATOM_NIL)
 
+#define IS_CLOSURE(ATOM) (ATOM_TYPE(ATOM) == ATOM_CLOSURE)
+
 #define CAR(LIST) (LIST_FIRST(LIST))
 #define CDR(LIST) ((LIST) != NULL ? LIST_NEXT((LIST), entries) : NULL)
 #define CDDR(LIST) CDR(CDR(LIST))
@@ -28,10 +30,19 @@ enum
     ATOM_SYMBOL,
     ATOM_LIST,
     ATOM_TRUE,
-    ATOM_FALSE
+    ATOM_FALSE,
+    ATOM_CLOSURE
 };
 
 struct atom;
+struct env;
+
+struct closure
+{
+    struct env *env;
+    struct atom *params;
+    struct atom *body;
+};
 
 LIST_HEAD(list, atom);
 
@@ -48,6 +59,7 @@ struct atom
             int len;
         } str;
         struct list *list;
+        struct closure closure;
     };
 
     LIST_ENTRY(atom) entries;
@@ -59,6 +71,8 @@ struct atom *atom_new_str(const char *str, int len);
 struct atom *atom_new_sym(const char *sym, int len);
 struct atom *atom_new_list(struct list *list);
 struct atom *atom_new_list_empty();
+struct atom *atom_new_closure(struct atom *params, struct atom *body,
+    struct env *env);
 struct atom *atom_clone();
 
 void print_atom(struct atom *atom, int level);
