@@ -6,15 +6,19 @@
 #include <string.h>
 #include <stdarg.h>
 
-struct atom true_atom = { ATOM_TRUE };
-struct atom false_atom = { ATOM_FALSE };
-struct atom nil_atom = { ATOM_NIL } ;
+struct atom true_atom;
+struct atom false_atom;
+struct atom nil_atom;
 
 __attribute__((constructor))
 static void setup_builtin_atoms()
 {
     nil_atom.list = calloc(1, sizeof(*nil_atom.list));
     LIST_INIT(nil_atom.list);
+
+    true_atom.type = ATOM_TRUE;
+    false_atom.type = ATOM_FALSE;
+    nil_atom.type = ATOM_NIL;
 }
 
 struct atom *atom_new(char type)

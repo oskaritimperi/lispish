@@ -75,6 +75,7 @@ struct atom *builtin_quote(struct atom *expr, struct env *env)
 {
     struct list *list = expr->list;
     struct atom *op = LIST_FIRST(list);
+    (void) env;
     return atom_clone(LIST_NEXT(op, entries));
 }
 
@@ -83,6 +84,8 @@ struct atom *builtin_atom(struct atom *expr, struct env *env)
     struct list *list = expr->list;
     struct atom *op = LIST_FIRST(list);
     struct atom *a = LIST_NEXT(op, entries);
+
+    (void) env;
 
     if (!a)
         return &nil_atom;

@@ -8,7 +8,7 @@
 #include "atom.h"
 #include "linenoise.h"
 
-int main(int argc, char **argv)
+int main()
 {
     char *line;
     struct env *env;

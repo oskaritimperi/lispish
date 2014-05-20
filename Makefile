@@ -2,7 +2,7 @@ SOURCES = parse.c atom.c eval.c tokens.c env.c
 OBJECTS = $(SOURCES:.c=.o)
 TEST_OBJECTS = $(foreach obj,$(OBJECTS),test_$(obj))
 
-CFLAGS = -Wall -g
+CFLAGS = -Wall -Wextra -g
 LDFLAGS =
 
 CC = gcc
